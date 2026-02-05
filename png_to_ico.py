@@ -590,9 +590,11 @@ class PngToIcoConverter:
         # Info text
         info_text = """How it works:
   1. Looks for folder.ico in the folder
-  2. If not found, converts folder.png
-  3. Creates desktop.ini for the icon
-  4. Sets Windows file attributes
+  2. Checks ICO has required sizes (16, 32, 48, 256)
+  3. If sizes missing, regenerates from folder.png
+  4. If no ICO found, converts folder.png
+  5. Creates desktop.ini for the icon
+  6. Sets Windows file attributes
 
 Note: Refresh Explorer (F5) to see changes."""
 
@@ -1002,6 +1004,26 @@ Note: Refresh Explorer (F5) to see changes."""
         except Exception as e:
             self.folder_preview_info.config(text="Preview error", fg="#cc0000")
 
+    # Required sizes that a folder ICO must contain
+    REQUIRED_FOLDER_ICO_SIZES = {16, 32, 48, 256}
+    # Full set of sizes to generate when creating/regenerating folder ICOs
+    FOLDER_ICO_SIZES = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+
+    def get_ico_sizes(self, ico_path: Path):
+        """Get the set of widths contained in an ICO file."""
+        try:
+            img = Image.open(ico_path)
+            sizes = set()
+            if hasattr(img, 'n_frames') and img.n_frames > 1:
+                for i in range(img.n_frames):
+                    img.seek(i)
+                    sizes.add(img.size[0])
+            else:
+                sizes.add(img.size[0])
+            return sizes
+        except Exception:
+            return set()
+
     def process_single_folder(self, folder_path: Path):
         """
         Process a single folder to set its icon.
@@ -1013,6 +1035,18 @@ Note: Refresh Explorer (F5) to see changes."""
 
         # Check for existing ico
         if ico_path.exists():
+            # Check if ICO has all required sizes
+            existing_sizes = self.get_ico_sizes(ico_path)
+            missing_sizes = self.REQUIRED_FOLDER_ICO_SIZES - existing_sizes
+
+            if missing_sizes and png_path.exists():
+                # Regenerate ICO from PNG with full sizes
+                try:
+                    img = Image.open(png_path)
+                    img.save(ico_path, format='ICO', sizes=self.FOLDER_ICO_SIZES)
+                except Exception as e:
+                    return (f"Failed to regenerate ICO: {str(e)}", None)
+
             result = self.set_folder_icon(folder_path, ico_path)
             return (result, ico_path) if result is True else (result, None)
 
@@ -1020,9 +1054,7 @@ Note: Refresh Explorer (F5) to see changes."""
         if png_path.exists():
             try:
                 img = Image.open(png_path)
-                # Standard folder icon sizes
-                sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-                img.save(ico_path, format='ICO', sizes=sizes)
+                img.save(ico_path, format='ICO', sizes=self.FOLDER_ICO_SIZES)
                 result = self.set_folder_icon(folder_path, ico_path)
                 return (result, ico_path) if result is True else (result, None)
             except Exception as e:
@@ -1047,8 +1079,8 @@ Note: Refresh Explorer (F5) to see changes."""
                     text=True
                 )
 
-            # Write desktop.ini
-            content = f"[.ShellClassInfo]\nIconResource={ico_path.name},0\n"
+            # Write desktop.ini with absolute path to ico
+            content = f"[.ShellClassInfo]\nIconResource={ico_path.resolve()},0\n"
             desktop_ini.write_text(content, encoding='utf-8')
 
             # Set attributes on folder (make it a system folder)
