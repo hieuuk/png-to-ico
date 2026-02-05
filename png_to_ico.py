@@ -1079,8 +1079,8 @@ Note: Refresh Explorer (F5) to see changes."""
                     text=True
                 )
 
-            # Write desktop.ini with absolute path to ico
-            content = f"[.ShellClassInfo]\nIconResource={ico_path.resolve()},0\n"
+            # Write desktop.ini with relative path to ico (same folder)
+            content = f"[.ShellClassInfo]\nIconResource={ico_path.name},0\n"
             desktop_ini.write_text(content, encoding='utf-8')
 
             # Set attributes on folder (make it a system folder)
