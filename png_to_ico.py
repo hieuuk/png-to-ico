@@ -70,6 +70,12 @@ class PngToIcoConverter:
         # Folder icon preview image reference
         self.folder_preview_image = None
 
+        # Apple touch icon preview image reference
+        self.apple_preview_image = None
+
+        # Folder icon path type (relative or absolute)
+        self.icon_path_type = tk.StringVar(value="relative")
+
         # Last generated HTML snippet for clipboard
         self.last_html_snippet = ""
 
@@ -84,17 +90,17 @@ class PngToIcoConverter:
         self.ico_tab = tk.Frame(self.notebook, padx=15, pady=15)
         self.notebook.add(self.ico_tab, text="PNG to ICO")
 
-        # Tab 2: Favicon set generation
-        self.favicon_tab = tk.Frame(self.notebook, padx=15, pady=15)
-        self.notebook.add(self.favicon_tab, text="Favicon Set")
-
-        # Tab 3: Folder icon
+        # Tab 2: Folder icon
         self.folder_tab = tk.Frame(self.notebook, padx=15, pady=15)
         self.notebook.add(self.folder_tab, text="Folder Icon")
 
+        # Tab 3: Favicon set generation
+        self.favicon_tab = tk.Frame(self.notebook, padx=15, pady=15)
+        self.notebook.add(self.favicon_tab, text="Favicon Set")
+
         self.setup_ico_tab()
-        self.setup_favicon_tab()
         self.setup_folder_tab()
+        self.setup_favicon_tab()
 
         # Warning if dependencies missing
         if Image is None:
@@ -352,19 +358,42 @@ class PngToIcoConverter:
         )
         self.color_preview.pack(side=tk.LEFT, padx=(10, 5))
 
-        self.color_label = tk.Label(
+        self.color_entry = tk.Entry(
             color_frame,
-            text=self.bg_color,
             font=("Arial", 9),
             width=8
         )
-        self.color_label.pack(side=tk.LEFT, padx=(0, 10))
+        self.color_entry.insert(0, self.bg_color)
+        self.color_entry.pack(side=tk.LEFT, padx=(0, 10))
+        self.color_entry.bind("<KeyRelease>", lambda e: self.on_hex_entry(
+            self.color_entry, 'bg_color', self.color_preview))
 
         tk.Button(
             color_frame,
             text="Choose",
             command=self.choose_color
         ).pack(side=tk.LEFT)
+
+        # Apple Touch Icon preview
+        apple_preview_frame = tk.Frame(options_frame)
+        apple_preview_frame.pack(fill=tk.X, pady=(5, 5))
+
+        tk.Label(
+            apple_preview_frame,
+            text="Preview:",
+            font=("Arial", 8),
+            fg="#888888"
+        ).pack(side=tk.LEFT)
+
+        self.apple_preview_canvas = tk.Canvas(
+            apple_preview_frame,
+            width=120,
+            height=120,
+            bg="#f8f8f8",
+            relief=tk.SUNKEN,
+            bd=1
+        )
+        self.apple_preview_canvas.pack(side=tk.LEFT, padx=(10, 0))
 
         # Manifest theme_color picker
         theme_frame = tk.Frame(options_frame)
@@ -386,13 +415,15 @@ class PngToIcoConverter:
         )
         self.theme_color_preview.pack(side=tk.LEFT, padx=(10, 5))
 
-        self.theme_color_label = tk.Label(
+        self.theme_color_entry = tk.Entry(
             theme_frame,
-            text=self.theme_color,
             font=("Arial", 9),
             width=8
         )
-        self.theme_color_label.pack(side=tk.LEFT, padx=(0, 10))
+        self.theme_color_entry.insert(0, self.theme_color)
+        self.theme_color_entry.pack(side=tk.LEFT, padx=(0, 10))
+        self.theme_color_entry.bind("<KeyRelease>", lambda e: self.on_hex_entry(
+            self.theme_color_entry, 'theme_color', self.theme_color_preview))
 
         tk.Button(
             theme_frame,
@@ -420,13 +451,15 @@ class PngToIcoConverter:
         )
         self.manifest_bg_preview.pack(side=tk.LEFT, padx=(10, 5))
 
-        self.manifest_bg_label = tk.Label(
+        self.manifest_bg_entry = tk.Entry(
             manifest_bg_frame,
-            text=self.manifest_bg_color,
             font=("Arial", 9),
             width=8
         )
-        self.manifest_bg_label.pack(side=tk.LEFT, padx=(0, 10))
+        self.manifest_bg_entry.insert(0, self.manifest_bg_color)
+        self.manifest_bg_entry.pack(side=tk.LEFT, padx=(0, 10))
+        self.manifest_bg_entry.bind("<KeyRelease>", lambda e: self.on_hex_entry(
+            self.manifest_bg_entry, 'manifest_bg_color', self.manifest_bg_preview))
 
         tk.Button(
             manifest_bg_frame,
@@ -587,6 +620,45 @@ class PngToIcoConverter:
         )
         self.subfolder_check.pack(pady=(10, 5))
 
+        # Icon path type option
+        path_frame = tk.Frame(left_frame)
+        path_frame.pack(fill=tk.X, pady=(5, 0))
+
+        tk.Label(
+            path_frame,
+            text="desktop.ini icon path:",
+            font=("Arial", 9),
+            fg="#555555"
+        ).pack(side=tk.LEFT)
+
+        tk.Radiobutton(
+            path_frame,
+            text="Relative",
+            variable=self.icon_path_type,
+            value="relative",
+            font=("Arial", 9),
+            command=self.update_path_preview_label
+        ).pack(side=tk.LEFT, padx=(5, 0))
+
+        tk.Radiobutton(
+            path_frame,
+            text="Absolute",
+            variable=self.icon_path_type,
+            value="absolute",
+            font=("Arial", 9),
+            command=self.update_path_preview_label
+        ).pack(side=tk.LEFT, padx=(5, 0))
+
+        # Path preview label
+        self.path_preview_label = tk.Label(
+            left_frame,
+            text="IconResource=folder.ico,0",
+            font=("Arial", 8),
+            fg="#888888",
+            anchor="w"
+        )
+        self.path_preview_label.pack(fill=tk.X, pady=(2, 0))
+
         # Info text
         info_text = """How it works:
   1. Looks for folder.ico in the folder
@@ -652,6 +724,13 @@ Note: Refresh Explorer (F5) to see changes."""
         )
         self.folder_path_label.pack(pady=(5, 0))
 
+    def update_path_preview_label(self):
+        """Update the path preview label based on selected path type."""
+        if self.icon_path_type.get() == "relative":
+            self.path_preview_label.config(text="IconResource=folder.ico,0")
+        else:
+            self.path_preview_label.config(text="IconResource=C:\\...\\folder.ico,0")
+
     def validate_prefix(self, event=None):
         """Validate prefix input - allow only alphanumeric, hyphens, underscores."""
         current = self.prefix_entry.get()
@@ -691,6 +770,25 @@ Note: Refresh Explorer (F5) to see changes."""
             self.file_tooltip.destroy()
             self.file_tooltip = None
 
+    def on_hex_entry(self, entry, attr_name, preview_frame):
+        """Validate hex color entry and update swatch if valid."""
+        value = entry.get().strip()
+        if re.match(r'^#?[0-9a-fA-F]{6}$', value):
+            hex_color = value if value.startswith('#') else f'#{value}'
+            setattr(self, attr_name, hex_color)
+            preview_frame.config(bg=hex_color)
+            entry.config(fg="black")
+            if attr_name == 'bg_color':
+                self.update_apple_touch_preview()
+        else:
+            entry.config(fg="#cc0000")
+
+    def _update_color_entry(self, entry, hex_color):
+        """Update an entry field with a hex color value."""
+        entry.delete(0, tk.END)
+        entry.insert(0, hex_color)
+        entry.config(fg="black")
+
     def choose_color(self):
         """Open color chooser dialog for apple-touch-icon background."""
         color = colorchooser.askcolor(
@@ -700,7 +798,8 @@ Note: Refresh Explorer (F5) to see changes."""
         if color[1]:
             self.bg_color = color[1]
             self.color_preview.config(bg=self.bg_color)
-            self.color_label.config(text=self.bg_color)
+            self._update_color_entry(self.color_entry, self.bg_color)
+            self.update_apple_touch_preview()
 
     def choose_theme_color(self):
         """Open color chooser dialog for manifest theme color."""
@@ -711,7 +810,7 @@ Note: Refresh Explorer (F5) to see changes."""
         if color[1]:
             self.theme_color = color[1]
             self.theme_color_preview.config(bg=self.theme_color)
-            self.theme_color_label.config(text=self.theme_color)
+            self._update_color_entry(self.theme_color_entry, self.theme_color)
 
     def choose_manifest_bg_color(self):
         """Open color chooser dialog for manifest background color."""
@@ -722,7 +821,7 @@ Note: Refresh Explorer (F5) to see changes."""
         if color[1]:
             self.manifest_bg_color = color[1]
             self.manifest_bg_preview.config(bg=self.manifest_bg_color)
-            self.manifest_bg_label.config(text=self.manifest_bg_color)
+            self._update_color_entry(self.manifest_bg_entry, self.manifest_bg_color)
 
     def select_source_file(self):
         """Select source PNG for favicon generation."""
@@ -748,6 +847,7 @@ Note: Refresh Explorer (F5) to see changes."""
 
         # Update preview
         self.update_favicon_preview(file_path)
+        self.update_apple_touch_preview()
 
     def update_favicon_preview(self, file_path):
         """Update the favicon tab preview with the selected image."""
@@ -763,6 +863,45 @@ Note: Refresh Explorer (F5) to see changes."""
             x = 50
             y = 50
             self.favicon_preview_canvas.create_image(x, y, image=self.favicon_preview_image)
+        except Exception:
+            pass
+
+    def update_apple_touch_preview(self):
+        """Update the Apple Touch Icon preview with icon on colored background."""
+        if Image is None or ImageTk is None:
+            return
+        if not self.selected_file:
+            return
+        try:
+            # Parse background color
+            bg_hex = self.bg_color.lstrip('#')
+            r = int(bg_hex[0:2], 16)
+            g = int(bg_hex[2:4], 16)
+            b = int(bg_hex[4:6], 16)
+
+            # Create 120x120 background
+            size = 120
+            bg = Image.new('RGBA', (size, size), (r, g, b, 255))
+
+            # Open and resize source image
+            src = Image.open(self.selected_file)
+            if src.mode != 'RGBA':
+                src = src.convert('RGBA')
+            src = src.resize((size, size), Image.LANCZOS)
+
+            # Composite source onto background
+            bg.paste(src, (0, 0), src)
+
+            # Draw rounded corner mask to simulate iOS icon shape
+            from PIL import ImageDraw
+            mask = Image.new('L', (size, size), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=26, fill=255)
+            bg.putalpha(mask)
+
+            self.apple_preview_image = ImageTk.PhotoImage(bg)
+            self.apple_preview_canvas.delete("all")
+            self.apple_preview_canvas.create_image(60, 60, image=self.apple_preview_image)
         except Exception:
             pass
 
@@ -1079,8 +1218,12 @@ Note: Refresh Explorer (F5) to see changes."""
                     text=True
                 )
 
-            # Write desktop.ini with relative path to ico (same folder)
-            content = f"[.ShellClassInfo]\nIconResource={ico_path.name},0\n"
+            # Write desktop.ini with relative or absolute path to ico
+            if self.icon_path_type.get() == "absolute":
+                icon_ref = str(ico_path.resolve())
+            else:
+                icon_ref = ico_path.name
+            content = f"[.ShellClassInfo]\nIconResource={icon_ref},0\n"
             desktop_ini.write_text(content, encoding='utf-8')
 
             # Set attributes on folder (make it a system folder)
